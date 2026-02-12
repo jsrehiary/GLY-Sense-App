@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'scan_page.dart';
 
 class ConnectPage extends StatelessWidget {
   const ConnectPage({super.key});
@@ -14,32 +15,48 @@ class ConnectPage extends StatelessWidget {
             children: [
               const SizedBox(height: 32),
 
-              /// TITLE
               const Text(
                 "Hubungkan Wristband",
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
+
               const SizedBox(height: 40),
+
               Image.asset('assets/images/wristband.png'),
+
               const SizedBox(height: 12),
+
               const Text(
                 "Hubungkan Wristband Anda",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
+
               const SizedBox(height: 16),
+
               const Text(
-                "Pastikan Bluetooth Anda aktif dan perangkat GLY\n-Sense berada di dekat ponsel Anda untuk mulai\n deteksi ",
-                style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.5),
+                "Pastikan Bluetooth Anda aktif dan perangkat GLY-Sense\n berada di dekat ponsel Anda untuk mulai deteksi.",
+                style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.5),
                 textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 40),
+              Image.asset('assets/images/logoblu.png'),
+              SizedBox(height: 8),
+              Text(
+                'Mencari Perangkat',
+                style: TextStyle(fontSize: 14, color: Colors.black),
               ),
 
               const Spacer(),
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    //logic connect
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ScanPage()),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFE391DA),
@@ -58,8 +75,7 @@ class ConnectPage extends StatelessWidget {
                   ),
                 ),
               ),
-
-              const SizedBox(height: 28),
+              const SizedBox(height: 32),
             ],
           ),
         ),
