@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../home/pages/home_page.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class ScanPage extends StatefulWidget {
   const ScanPage({super.key});
@@ -14,43 +15,100 @@ class _ScanPageState extends State<ScanPage> {
   bool isScanning = false;
   BluetoothDevice? selectedDevice;
 
+  Future<void> requestPermissions() async {
+    try {
+      await Permission.bluetooth.request();
+      await Permission.bluetoothConnect.request();
+      await Permission.location.request();
+    } catch (e) {
+      print(e.toString());
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    init();
+  }
+
+  void init() async {
+    await requestPermissions();
+
+    // 🔍 CEK DEVICE YANG SUDAH TERKONEKSI
+    List<BluetoothDevice> connectedDevices =
+        await FlutterBluePlus.connectedDevices;
+
+    if (connectedDevices.isNotEmpty) {
+      BluetoothDevice device = connectedDevices.first;
+
+      print("✅ Sudah terkoneksi: ${device.name}");
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => HomePage(device: device)),
+        (route) => false,
+      );
+
+      return; // jangan scan lagi
+    }
+
+    FlutterBluePlus.adapterState.listen((state) {
+      print("Adapter state: $state");
+    });
+
     startScan();
   }
 
-  void startScan() async {
+  Future<void> startScan() async {
     setState(() {
       isScanning = true;
       scanResults.clear();
     });
 
-    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+    await FlutterBluePlus.stopScan();
+
+    await FlutterBluePlus.startScan(
+      timeout: const Duration(seconds: 5),
+      androidScanMode: AndroidScanMode.lowLatency,
+    );
 
     FlutterBluePlus.scanResults.listen((results) {
+      if (!mounted) return;
+
       setState(() {
-        scanResults = results;
+        scanResults = results.where((r) => r.device.name.isNotEmpty).toList();
       });
     });
 
-    await Future.delayed(const Duration(seconds: 5));
+    await Future.delayed(const Duration(seconds: 5)); // scanning 5 detik
+
+    if (!mounted) return;
 
     setState(() {
       isScanning = false;
     });
+
+    FlutterBluePlus.scanResults.listen((results) {
+      print("Found devices: ${results.length}");
+    });
   }
 
-  void connectToDevice(BluetoothDevice device) async {
-    await device.connect();
+  Future<void> connectToDevice(BluetoothDevice device) async {
+    try {
+      await device.connect();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const HomePage()),
-      (route) => false,
-    );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => HomePage(device: device)),
+        (route) => false,
+      );
+    } catch (e) {
+      print("Connection error: $e");
+    }
   }
 
   @override
@@ -62,6 +120,15 @@ class _ScanPageState extends State<ScanPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
+        actions: [
+          IconButton(
+            onPressed: () async {
+              await startScan();
+            },
+            icon: Icon(Icons.refresh),
+            tooltip: "Refresh",
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -102,17 +169,14 @@ class _ScanPageState extends State<ScanPage> {
                 onPressed: selectedDevice == null
                     ? null
                     : () async {
-                        await FlutterBluePlus.stopScan();
-                        await selectedDevice!.connect();
-
-                        if (!mounted) return;
-
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(builder: (_) => const HomePage()),
-                          (route) => false,
-                        );
+                        try {
+                          await FlutterBluePlus.stopScan();
+                          await connectToDevice(selectedDevice!);
+                        } catch (e) {
+                          print("Error connect button: $e");
+                        }
                       },
+
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFE391DA),
                   padding: const EdgeInsets.symmetric(vertical: 18),
