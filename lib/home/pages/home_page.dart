@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:glysense_prototipe/models/home_model.dart';
 import 'package:glysense_prototipe/services/home_service.dart';
 import '../widgets/status_card.dart';
 import '../widgets/device_status_card.dart';
 import '../widgets/health_card.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final BluetoothDevice device;
+  const HomePage({super.key, required this.device});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -22,23 +27,28 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    print('init state jalan');
-    fetchData();
+    startListening();
   }
 
-  void fetchData() async {
-    print("FETCH DATA DIPANGGIL");
-    await Future.delayed(const Duration(seconds: 2));
-
-    setState(() {
-      status = "rendah";
-      heartRate = 85;
-      spo2 = 96;
-      isLoading = false;
-    });
-
-    print("SETSTATE SELESAI");
+  @override
+  void dispose() {
+    dataSub.cancel();
+    super.dispose();
   }
+
+  // void fetchData() async {
+  //   print("FETCH DATA DIPANGGIL");
+  //   await Future.delayed(const Duration(seconds: 2));
+
+  //   setState(() {
+  //     status = "rendah";
+  //     heartRate = 85;
+  //     spo2 = 96;
+  //     isLoading = false;
+  //   });
+
+  //   print("SETSTATE SELESAI");
+  // }
 
   // void fetchData() async {
   //   try {
@@ -56,6 +66,51 @@ class _HomePageState extends State<HomePage> {
   //   }
   // }
 
+  late StreamSubscription<HomeModel> dataSub;
+
+  void startListening() {
+    final service = HomeService();
+
+    dataSub = service.listenToHealthData(widget.device).listen((result) {
+      setState(() {
+        status = "AMAN"; // ini nanti API Call
+
+        // Filter heartRate supaya hanya angka
+        List<num> validHeartRate = result.heartRate
+            .map((e) {
+              if (e == null) return null;
+              if (e is num) return e;
+              if (e is String) return num.tryParse(e);
+              return null;
+            })
+            .where((e) => e != null)
+            .cast<num>()
+            .toList();
+
+        heartRate = validHeartRate.isNotEmpty
+            ? validHeartRate.reduce((a, b) => a + b) / validHeartRate.length
+            : 0;
+
+        // Filter spo2 supaya hanya angka
+        List<num> validSpO2 = result.spo2
+            .map((e) {
+              if (e == null) return null;
+              if (e is num) return e;
+              if (e is String) return num.tryParse(e);
+              return null;
+            })
+            .where((e) => e != null)
+            .cast<num>()
+            .toList();
+
+        spo2 = validSpO2.isNotEmpty
+            ? validSpO2.reduce((a, b) => a + b) / validSpO2.length
+            : 0;
+
+        isLoading = false;
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
