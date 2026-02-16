@@ -22,6 +22,12 @@ class HomeService {
     collectionDuration = duration;
   }
 
+  //
+  final StreamController<Map<String, dynamic>> _resultController =
+      StreamController.broadcast();
+
+  Stream<Map<String, dynamic>> get resultStream => _resultController.stream;
+
   // ===============================
   // LISTEN BLE
   // ===============================
@@ -57,15 +63,19 @@ class HomeService {
         final model = HomeModel.fromJson(data);
 
         // Filter & simpan HR
-        for (var hr in model.heartRate) {
-          num? parsed = hr is num ? hr : num.tryParse(hr.toString());
-          if (parsed != null) hrBuffer.add(parsed);
-        }
+        bool isValidHR = model.heartRate >= 40 && model.heartRate <= 180;
+        bool isValidSpO2 = model.spo2 >= 90 && model.spo2 <= 100;
 
-        // Filter & simpan SpO2
-        for (var sp in model.spo2) {
-          num? parsed = sp is num ? sp : num.tryParse(sp.toString());
-          if (parsed != null) spo2Buffer.add(parsed);
+        bool isFingerDetected = isValidHR && isValidSpO2;
+
+        if (isFingerDetected) {
+          hrBuffer.add(model.heartRate);
+          spo2Buffer.add(model.spo2);
+
+          print("hr: ${model.heartRate}");
+          print("spo2: ${model.spo2}");
+        } else {
+          print("❌ Invalid data / finger not detected");
         }
 
         // 🔒 Batasi ukuran buffer (SETELAH add)
@@ -107,6 +117,18 @@ class HomeService {
   }
 
   // ===============================
+  // average (function)
+  // ===============================
+  double average(List<dynamic> list) {
+    final numbers = list.whereType<num>().toList();
+
+    if (numbers.isEmpty) return 0;
+
+    final sum = numbers.reduce((a, b) => a + b);
+    return sum / numbers.length;
+  }
+
+  // ===============================
   // SEND TO API
   // ===============================
   Future<void> sendToApi({required String deviceId}) async {
@@ -114,6 +136,16 @@ class HomeService {
       print("Buffer kosong, tidak dikirim.");
       return;
     }
+
+    // sebelum send ke API
+    final avgHr = average(hrBuffer);
+    final avgSpo2 = average(spo2Buffer);
+
+    print("hrBuffer: $hrBuffer\n");
+    print("avg. hrBuffer: $avgHr\n");
+
+    print("avg. hrBuffer: ${avgHr.toStringAsFixed(2)}");
+    print("avg. spo2Buffer: ${avgSpo2.toStringAsFixed(2)}");
 
     final payload = {
       "data": [
@@ -140,6 +172,17 @@ class HomeService {
       print("📡 API STATUS: ${response.statusCode}");
       print("📡 API RESPONSE: ${response.body}");
 
+      final decoded = jsonDecode(response.body);
+      final eventId = decoded["event_id"];
+
+      final result = await fetchProcessingResult(eventId);
+
+      if (result != null) {
+        _resultController.add(result); // 🔥 kirim ke UI
+      }
+
+      print("RESULT MAP: $result");
+
       // clear buffer setelah sukses kirim
       hrBuffer.clear();
       spo2Buffer.clear();
@@ -148,7 +191,29 @@ class HomeService {
     }
   }
 
+  Future<Map<String, dynamic>?> fetchProcessingResult(String eventId) async {
+    try {
+      final url = Uri.parse(
+        "https://lonelyhina-gly-sense.hf.space/gradio_api/call/core_processing/$eventId",
+      );
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        print("📊 FINAL RESULT: ${response.body}");
+        return jsonDecode(response.body);
+      } else {
+        print("❌ Failed to fetch result: ${response.statusCode}");
+        return null;
+      }
+    } catch (e) {
+      print("🔥 ERROR fetchProcessingResult: $e");
+      return null;
+    }
+  }
+
   void dispose() {
     _timer?.cancel();
+    _resultController.close();
   }
 }
